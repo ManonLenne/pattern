@@ -1,0 +1,786 @@
+<!doctype html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Pattern creator</title>
+    <style>
+        body {
+            font-family: 'typewriter', monospace;
+            padding: 10px;
+            background: #000000;
+            color: #ffffff;
+        }
+        .app {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        h1 { margin: 0 0 12px; font-size: 20px; }
+        label { display:block; margin-bottom:8px; font-weight:600; }
+        textarea {
+            width: 100%;
+            min-height: 80px;
+            padding: 10px;
+            font-size: 16px;
+            box-sizing: border-box;
+            border: 1px solid #ffffff;
+            border-radius: 6px;
+            resize: vertical;
+            background: #ffffff;
+        }
+        .patterns {
+            margin-top: 16px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+        .pattern {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 72px;
+            height: 72px;
+            background: #000000;
+            border: 1px solid #000000;
+            border-radius: 6px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+            overflow: hidden;
+        }
+        .pattern img {
+            max-width: 100%;
+            max-height: 100%;
+            display: block;
+        }
+        .space {
+            width: 72px;
+            height: 72px;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            color:#000000;
+            font-size:12px;
+            border: 1px dashed #eee;
+            border-radius:6px;
+            background: #fcfcfc;
+        }
+
+
+        /* bordure noire tout à gauche de l'écran (sans ajouter d'élément HTML) */
+        body::before {
+            content: "";
+            position: fixed;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 20px; /* ajuster l'épaisseur ici */
+            background: #000;
+            z-index: 99999; /* au-dessus des autres éléments */
+            pointer-events: none; /* ne bloque pas les interactions */
+        }
+
+        /* petit logo "sans titre" superposé en haut à gauche */
+        body::after{
+            content: "";
+            position: fixed;
+            top: 8px;
+            left: 8px;
+            width: 120px;
+            height: 120px;
+            background-image: url("fonts/Sans titre-1.png");
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            border-radius: 6px;
+            border: 1px solid rgba(0,0,0,0.15);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.6);
+            z-index: 100000; /* au-dessus de body::before (99999) */
+            pointer-events: none; /* ne bloque pas les interactions */
+        }
+
+        /* optionnel : réduire la taille sur petits écrans */
+        @media (max-width: 480px){
+            body::after{ width: 36px; height: 36px; top: 6px; left: 6px; border-radius: 4px; }
+        }
+        /* header fixe côté gauche avec le titre "PATTERN" aligné à gauche */
+        .frame::before {
+            content: "PATTERN";
+            position: fixed;
+            left: 0;
+            top: 0;
+            font-family: "TYPEWRITER", monospace;
+            letter-spacing: 2px;
+            font-weight: 400;
+
+            width: 75vw;
+            height: 64px;
+            display: flex;
+            justify-content: center;
+            left: 50%;
+            transform: translateX(-50%);
+            padding-left: 0;
+            align-items: center;
+            padding-left: 24px;
+            box-sizing: border-box;
+            font-size: 20px;
+            font-weight: 700;
+            color: #ffffff;
+            height: 100px;
+            font-size: 36px;
+            padding-left: 32px;
+            background: #000000;
+            border-bottom: 1px solid #000000;
+            z-index: 30;
+            text-transform: none;
+        }
+
+        /* évite que le contenu du cadre soit masqué par l'en-tête */
+        .frame { padding-top: calc(64px + 24px) !important; }
+        
+        .hint { margin-top:8px; color:#666; font-size:13px; }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <h1 style="text-align: left;">Réglages</h1>
+        <label for="text">Tapez du texte :</label>
+        <textarea id="text" placeholder="Les accents sont automatiquement normalisés."></textarea>
+    </div>
+
+        <div id="patterns" class="patterns" aria-live="polite"></div>
+    </div>
+
+    <script>
+        const textarea = document.getElementById('text');
+        const patternsEl = document.getElementById('patterns');
+
+        // transforme les lettres accentuées en leur version basique (é -> e)
+        function stripDiacritics(str) {
+            return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        }
+
+        // placer le cadre sous l'en-tête (64px) : override via CSS !important pour écraser les styles inline
+        (function placeBelowHeader() {
+            const s = document.createElement('style');
+            s.textContent = `
+                /* décaler le cadre sous l'en-tête fixe et réduire sa hauteur en conséquence */
+                .frame {
+                    top: 64px !important;
+                    height: calc(100vh - 64px) !important;
+                    padding-top: 64px !important; /* laisser un petit espacement interne */
+                }
+                /* conserver l'en-tête fixe au sommet de la fenêtre */
+                .frame::before { top: 0 !important; }
+                /* éviter que le contenu principal soit masqué par l'en-tête */
+                .app { margin-top: 120px !important; }
+            `;
+            document.head.appendChild(s);
+        })();
+        (function createLeftFrame() {
+            const frame = document.createElement('div');
+            frame.className = 'frame';
+            frame.setAttribute('role', 'region');
+            frame.setAttribute('aria-label', 'Aperçu des patterns');
+            // styles principaux (position fixe à gauche 75% de la largeur)
+            Object.assign(frame.style, {
+            position: 'fixed',
+            left: '0',
+            top: '0',
+            width: '75vw',
+            height: '100vh',
+            boxSizing: 'border-box',
+            padding: '24px',
+            overflow: 'auto',
+            background: '#fff',
+            borderRight: '1px solid #e6e2df',
+            zIndex: '10'
+            });
+
+            // insère le cadre avant l'élément patterns existant puis y déplace #patterns
+            const oldParent = patternsEl.parentNode;
+            oldParent.insertBefore(frame, patternsEl);
+            frame.appendChild(patternsEl);
+
+            // espace le contenu principal (.app) vers la droite pour laisser la place au cadre
+            const app = document.querySelector('.app');
+            if (app) {
+                // positionne le cadre à droite et adapte les bordures
+                frame.style.left = 'auto';
+                frame.style.right = '0';
+                frame.style.borderLeft = '1px solid #e6e2df';
+                frame.style.borderRight = 'none';
+
+                // ajuste le pseudo-élément d'en-tête pour l'ancrer côté droit
+                const _rightHeader = document.createElement('style');
+                _rightHeader.id = '__frame-right-header';
+                _rightHeader.textContent = `
+                    .frame::before{
+                        left: auto !important;
+                        right: 0 !important;
+                        transform: translateX(0) !important;
+                        padding-left: 16px !important;
+                        padding-right: 32px !important;
+                        justify-content: flex-start !important;
+                        box-sizing: border-box !important;
+                    }
+                `;
+                document.head.appendChild(_rightHeader);
+
+                // ré-applique les styles souhaités sur .app après les assignations inline suivantes
+                // pour s'assurer que le contenu reste à gauche et le cadre à droite
+                setTimeout(() => {
+                    app.style.marginLeft = '0';
+                    app.style.marginRight = '75vw';
+                    app.style.boxSizing = 'border-box';
+                    app.style.paddingLeft = '24px';
+                    app.style.paddingRight = '24px';
+                }, 0);
+            app.style.marginLeft = '75vw';
+            app.style.boxSizing = 'border-box';
+            app.style.paddingLeft = '24px';
+            }
+        })();
+
+        // crée un panneau de réglages pour la taille des vignettes et le nombre d'éléments par ligne
+        (function createSizeControls() {
+            const app = document.querySelector('.app');
+            if (!app) return;
+
+            const ctrl = document.createElement('div');
+            ctrl.style.display = 'flex';
+            ctrl.style.gap = '12px';
+            ctrl.style.alignItems = 'center';
+            ctrl.style.marginTop = '12px';
+            ctrl.style.flexWrap = 'wrap';
+
+            // taille des vignettes
+            const sizeLabel = document.createElement('label');
+            sizeLabel.textContent = 'Taille';
+            sizeLabel.style.display = 'flex';
+            sizeLabel.style.alignItems = 'center';
+            sizeLabel.style.gap = '8px';
+
+            const sizeValue = document.createElement('span');
+            sizeValue.id = 'sizeValue';
+            sizeValue.style.minWidth = '36px';
+            sizeValue.style.textAlign = 'right';
+
+            const sizeInput = document.createElement('input');
+            sizeInput.type = 'range';
+            sizeInput.min = '20';
+            sizeInput.max = '280';
+            sizeInput.step = '4';
+
+            // colonnes / longueur de ligne
+            const colsLabel = document.createElement('label');
+            colsLabel.textContent = 'Éléments par ligne';
+            colsLabel.style.display = 'flex';
+            colsLabel.style.alignItems = 'center';
+            colsLabel.style.gap = '8px';
+
+            const colsValue = document.createElement('span');
+            colsValue.id = 'colsValue';
+            colsValue.style.minWidth = '28px';
+            colsValue.style.textAlign = 'right';
+
+            const colsInput = document.createElement('input');
+            colsInput.type = 'range';
+            colsInput.min = '1';
+            colsInput.max = '26';
+            colsInput.step = '1';
+
+            // restore / defaults
+            const DEFAULT_SIZE = 120;
+            const DEFAULT_COLS = 6;
+            const savedSize = parseInt(localStorage.getItem('thumbSize'), 10);
+            const savedCols = parseInt(localStorage.getItem('thumbCols'), 10);
+            sizeInput.value = Number.isFinite(savedSize) ? savedSize : DEFAULT_SIZE;
+            colsInput.value = Number.isFinite(savedCols) ? savedCols : DEFAULT_COLS;
+            sizeValue.textContent = sizeInput.value + 'px';
+            colsValue.textContent = colsInput.value;
+
+            sizeLabel.appendChild(sizeInput);
+            sizeLabel.appendChild(sizeValue);
+            colsLabel.appendChild(colsInput);
+            colsLabel.appendChild(colsValue);
+
+            ctrl.appendChild(sizeLabel);
+            ctrl.appendChild(colsLabel);
+
+            app.appendChild(ctrl);
+
+            // when controls change, persist and update display
+            function persistAndUpdate() {
+            localStorage.setItem('thumbSize', sizeInput.value);
+            localStorage.setItem('thumbCols', colsInput.value);
+            sizeValue.textContent = sizeInput.value + 'px';
+            colsValue.textContent = colsInput.value;
+            updatePatterns();
+            }
+            sizeInput.addEventListener('input', persistAndUpdate);
+            colsInput.addEventListener('input', persistAndUpdate);
+        })();
+
+        function updatePatterns() {
+            const raw = textarea.value || '';
+            const normalized = stripDiacritics(raw);
+
+            // ajout d'un réglage "espacement" si absent
+            const DEFAULT_GAP = 8;
+            if (!document.getElementById('gapInput')) {
+                const app = document.querySelector('.app');
+                if (app) {
+                    const gapLabel = document.createElement('label');
+                    gapLabel.textContent = 'Espace';
+                    gapLabel.style.display = 'flex';
+                    gapLabel.style.alignItems = 'center';
+                    gapLabel.style.gap = '8px';
+
+                    const gapInput = document.createElement('input');
+                    gapInput.type = 'range';
+                    gapInput.id = 'gapInput';
+                    gapInput.min = '0';
+                    gapInput.max = '40';
+                    gapInput.step = '1';
+
+                    const savedGap = parseInt(localStorage.getItem('thumbGap'), 10);
+                    gapInput.value = Number.isFinite(savedGap) ? savedGap : DEFAULT_GAP;
+
+                    const gapValue = document.createElement('span');
+                    gapValue.id = 'gapValue';
+                    gapValue.style.minWidth = '36px';
+                    gapValue.style.textAlign = 'right';
+                    gapValue.textContent = gapInput.value + 'px';
+
+                    gapLabel.appendChild(gapInput);
+                    gapLabel.appendChild(gapValue);
+                    app.appendChild(gapLabel);
+
+                    gapInput.addEventListener('input', () => {
+                        localStorage.setItem('thumbGap', gapInput.value);
+                        gapValue.textContent = gapInput.value + 'px';
+                        updatePatterns();
+                    });
+                }
+            }
+            // style les curseurs (thumb + piste) en blanc
+            (function makeThumbRect() {
+                const s = document.createElement('style');
+                s.textContent = `
+                    /* track déjà blanc via makeRangeWhite, ici on force le pouce en rectangle */
+                    .app input[type="range"]::-webkit-slider-thumb{
+                        -webkit-appearance: none;
+                        appearance: none;
+                        width: 7px !important;
+                        height: 22px !important;
+                        border-radius: 1px !important; /* coin légèrement arrondi */
+                        background: #ffffff !important;
+                        border: 1px solid rgba(0,0,0,0.16) !important;
+                position: relative !important;
+                top: 50% !important;
+                margin-top: 15px !important;
+                transform: translateY(-50%) !important;
+                box-shadow: 0 1px 2px rgba(0,0,0,0.2) !important;
+                margin-top: 1px !important; /* centre vertical */
+                    }
+
+                    .app input[type="range"]::-moz-range-thumb{
+                        width: 28px !important;
+                        height: 12px !important;
+                        border-radius: 3px !important;
+                        background: #ffffff !important;
+                        border: 1px solid rgba(0,0,0,0.16) !important;
+                        box-shadow: 0 1px 2px rgba(0,0,0,0.2) !important;
+                    }
+
+                    .app input[type="range"]::-ms-thumb{
+                        width: 28px !important;
+                        height: 12px !important;
+                        border-radius: 3px !important;
+                        background: #ffffff !important;
+                        border: 1px solid rgba(0,0,0,0.16) !important;
+                        box-shadow: 0 1px 2px rgba(0,0,0,0.2) !important;
+                        margin-top: 0 !important;
+                    }
+                `;
+                document.head.appendChild(s);
+            })();
+            (function makeRangeWhite() {
+                const s = document.createElement('style');
+                s.textContent = `
+                    .app input[type="range"]{
+                        -webkit-appearance: none;
+                        appearance: none;
+                        background: transparent;
+                        height: 22px;
+                    }
+
+                    /* WebKit */
+                    .app input[type="range"]::-webkit-slider-runnable-track{
+                        height: 6px;
+                        background: #ffffff;
+                        border-radius: 6px;
+                    }
+                    .app input[type="range"]::-webkit-slider-thumb{
+                        -webkit-appearance: none;
+                        width: 18px;
+                        height: 18px;
+                        border-radius: 50%;
+                        background: #ffffff;
+                        border: 1px solid rgba(0,0,0,0.16);
+                        box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+                        margin-top: -6px;
+                    }
+
+                    /* Firefox */
+                    .app input[type="range"]::-moz-range-track{
+                        height: 6px;
+                        background: #ffffff;
+                        border-radius: 6px;
+                    }
+                    .app input[type="range"]::-moz-range-thumb{
+                        width: 18px;
+                        height: 18px;
+                        border-radius: 50%;
+                        background: #ffffff;
+                        border: 1px solid rgba(0,0,0,0.16);
+                        box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+                    }
+
+                    /* IE/Edge */
+                    .app input[type="range"]::-ms-track{
+                        height: 6px;
+                        background: transparent;
+                        border-color: transparent;
+                        color: transparent;
+                    }
+                    .app input[type="range"]::-ms-fill-lower,
+                    .app input[type="range"]::-ms-fill-upper{
+                        background: #ffffff;
+                        border-radius: 6px;
+                    }
+                    .app input[type="range"]::-ms-thumb{
+                        width: 18px;
+                        height: 18px;
+                        border-radius: 50%;
+                        background: #ffffff;
+                        border: 1px solid rgba(0,0,0,0.16);
+                    }
+
+                    /* focus */
+                    .app input[type="range"]:focus { outline: none; }
+                `;
+                document.head.appendChild(s);
+            })();
+            // lire la valeur d'espacement actuelle
+            const gap = (() => {
+                const gi = document.getElementById('gapInput');
+                const g = gi ? parseInt(gi.value, 10) : parseInt(localStorage.getItem('thumbGap'), 10);
+                return Number.isFinite(g) ? g : DEFAULT_GAP;
+            })();
+
+            // appliquer l'espacement (avec priorité pour écraser les règles globales)
+            patternsEl.style.setProperty('gap', gap + 'px', 'important');
+            patternsEl.innerHTML = '';
+            
+
+            // lire les réglages actuels
+            const size = (() => {
+            const s = parseInt(document.querySelector('#sizeValue')?.previousSibling?.value, 10);
+            return Number.isFinite(s) ? s : 120;
+            })();
+            const cols = (() => {
+            const c = parseInt(document.querySelector('#colsValue')?.previousSibling?.value, 10);
+            return Number.isFinite(c) ? c : 6;
+            })();
+
+            // fixe la largeur maximale du conteneur pour contrôler le nombre d'éléments par ligne
+            patternsEl.style.maxWidth = (cols > 0 ? (cols * size) + 'px' : 'none');
+            // conserver l'alignement au début
+            patternsEl.style.alignItems = 'flex-start';
+
+            for (const ch of normalized) {
+            if (/[A-Za-z]/.test(ch)) {
+                const letter = ch.toUpperCase();
+                const img = document.createElement('img');
+                img.src = `pattern/${letter}_0000.png`;
+                img.alt = `Pattern ${letter}`;
+                // wrapper
+                const wrap = document.createElement('div');
+                wrap.className = 'pattern';
+                // impose la taille via style inline avec priorité pour écraser les règles globales
+                wrap.style.setProperty('width', size + 'px', 'important');
+                wrap.style.setProperty('height', size + 'px', 'important');
+                wrap.style.boxSizing = 'border-box';
+                // image full
+                img.style.width = '100%';
+                img.style.height = '100%';
+                img.style.objectFit = 'cover';
+                img.style.display = 'block';
+                wrap.appendChild(img);
+                patternsEl.appendChild(wrap);
+            } else if (ch === ' ' || ch === '\n' || ch === '\t') {
+                const sp = document.createElement('div');
+                sp.className = 'space';
+                sp.style.setProperty('width', size + 'px', 'important');
+                sp.style.setProperty('height', size + 'px', 'important');
+                sp.style.display = 'flex';
+                sp.style.alignItems = 'center';
+                sp.style.justifyContent = 'center';
+                // pour un espace, afficher juste un carré blanc
+                if (ch === ' ') {
+                sp.textContent = '';
+                sp.style.background = '#fff';
+                sp.style.border = 'none';
+                sp.setAttribute('aria-label', 'espace');
+                } else if (ch === '\n') {
+                sp.textContent = 'SÀLTO';
+                sp.setAttribute('aria-label', 'saut de ligne');
+                } else {
+                sp.textContent = 'TAB';
+                sp.setAttribute('aria-label', 'tabulation');
+                }
+                patternsEl.appendChild(sp);
+            } else {
+                // caractère non pris en charge : bloc neutre
+                const unknown = document.createElement('div');
+                unknown.className = 'pattern';
+                unknown.title = 'Caractère non pris en charge';
+                unknown.style.setProperty('width', size + 'px', 'important');
+                unknown.style.setProperty('height', size + 'px', 'important');
+                patternsEl.appendChild(unknown);
+            }
+            }
+
+            // ajoute un bouton de téléchargement PNG dans la zone de réglages (créé une seule fois)
+            (function ensureDownloadButton() {
+                const app = document.querySelector('.app');
+                if (!app) return;
+                if (document.getElementById('downloadPngBtn')) return;
+
+                // injecte une règle CSS pour forcer le bouton en bas-centre de la zone de réglages (colonne gauche)
+                // la colonne gauche ayant une largeur ≈ 25vw, son centre est à 12.5vw
+                if (!document.getElementById('__download-btn-left-style')) {
+                    const st = document.createElement('style');
+                    st.id = '__download-btn-left-style';
+                    st.textContent = `
+                        #downloadPngBtn {
+                            position: fixed !important;
+                            bottom: 24px !important;
+                            left: 12.5vw !important;
+                            transform: translateX(-50%) !important;
+                            z-index: 1000 !important;
+                        }
+                        /* fallback sur petits écrans : centrer dans la fenêtre */
+                        @media (max-width: 640px) {
+                            #downloadPngBtn { left: 50% !important; }
+                        }
+                    `;
+                    document.head.appendChild(st);
+                }
+
+                const btn = document.createElement('button');
+                btn.id = 'downloadPngBtn';
+                btn.type = 'button';
+                btn.textContent = 'Télécharger';
+                btn.title = 'Capture la partie gauche et télécharge en PNG';
+                Object.assign(btn.style, {
+                    padding: '12px 20px',
+                    background: '#000',
+                    fontFamily: '"type", monospace',
+                    color: '#fff',
+                    border: '2px solid #fff',
+                    borderRadius: '8px',
+                    position: 'fixed',
+                    bottom: '24px',
+                    left: 'calc(75vw + 12.5vw)',
+                    transform: 'translateX(-50%)',
+                    zIndex: '1000',
+                    cursor: 'pointer',
+                    marginLeft: '8px',
+                    fontWeight: '700',
+                    fontSize: '16px',
+                    lineHeight: '1'
+                });
+
+                // si le panneau de contrôles existe, l'y ajouter, sinon dans .app
+                const ctrlRow = app.querySelector('div');
+                (ctrlRow || app).appendChild(btn);
+
+                // charge html2canvas à la demande
+                function loadHtml2Canvas() {
+                    if (window.html2canvas || window.html2canvas) return Promise.resolve();
+                    return new Promise((resolve, reject) => {
+                        const s = document.createElement('script');
+                        s.src = 'https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js';
+                        s.onload = () => resolve();
+                        s.onerror = () => reject(new Error('Impossible de charger html2canvas'));
+                        document.head.appendChild(s);
+                    });
+                }
+
+                btn.addEventListener('click', async () => {
+                    try {
+                        await loadHtml2Canvas();
+                        if (typeof html2canvas !== 'function') throw new Error('html2canvas introuvable');
+
+                        const frame = document.querySelector('.frame');
+                        if (!frame) throw new Error('Cadre introuvable');
+                        // agrandir temporairement le cadre pour que tout le contenu scrollable soit visible
+                        // forcer un fond blanc pendant le rendu (et restaurer ensuite)
+                        const _prevFrameBg = frame.style.background || '';
+                        const _prevDocBg = document.documentElement.style.background || '';
+                        const _prevBodyBg = document.body.style.background || '';
+
+                        const __tmpBgStyle = document.createElement('style');
+                        __tmpBgStyle.id = '__tmp-html2canvas-bg';
+                        __tmpBgStyle.textContent = `
+                            /* forcer un fond blanc pour la zone capturée et ses enfants */
+                            .frame, .frame * { background-color: #fff !important; }
+                            .frame { background: #fff !important; }
+                        `;
+                        document.head.appendChild(__tmpBgStyle);
+
+                        // aussi en inline pour être sûr
+                        frame.style.background = '#fff';
+                        document.documentElement.style.background = '#fff';
+                        document.body.style.background = '#fff';
+
+                        function __cleanupTempBg() {
+                            try { if (__tmpBgStyle && __tmpBgStyle.parentNode) __tmpBgStyle.parentNode.removeChild(__tmpBgStyle); } catch(e){}
+                            try { frame.style.background = _prevFrameBg; } catch(e){}
+                            try { document.documentElement.style.background = _prevDocBg; } catch(e){}
+                            try { document.body.style.background = _prevBodyBg; } catch(e){}
+                        }
+
+                        // si html2canvas est déjà présent, envelopper l'appel pour garantir le nettoyage après rendu
+                        if (typeof window.html2canvas === 'function') {
+                            const __origHtml2Canvas = window.html2canvas;
+                            window.html2canvas = function(el, opts) {
+                                return __origHtml2Canvas(el, opts).then((canvas) => {
+                                    __cleanupTempBg();
+                                    return canvas;
+                                }, (err) => {
+                                    __cleanupTempBg();
+                                    return Promise.reject(err);
+                                });
+                            };
+                        }
+                        const prevStyles = {
+                            height: frame.style.height || '',
+                            width: frame.style.width || '',
+                            overflow: frame.style.overflow || '',
+                            maxHeight: frame.style.maxHeight || ''
+                        };
+
+                        frame.style.height = frame.scrollHeight + 'px';
+                        frame.style.width = frame.scrollWidth + 'px';
+                        frame.style.overflow = 'visible';
+                        frame.style.maxHeight = 'none';
+
+                        // dimensions complètes à passer à html2canvas
+                        const width = frame.scrollWidth;
+                        const height = frame.scrollHeight;
+
+                        // wrapper de html2canvas pour restaurer les styles une fois le rendu terminé
+                        const _originalHtml2Canvas = window.html2canvas;
+                        if (typeof _originalHtml2Canvas === 'function') {
+                            window.html2canvas = function(el, opts) {
+                                return _originalHtml2Canvas(el, opts).then((canvas) => {
+                                    // restauration des styles initiaux
+                                    frame.style.height = prevStyles.height;
+                                    frame.style.width = prevStyles.width;
+                                    frame.style.overflow = prevStyles.overflow;
+                                    frame.style.maxHeight = prevStyles.maxHeight;
+                                    window.html2canvas = _originalHtml2Canvas;
+                                    return canvas;
+                                }, (err) => {
+                                    // restauration même en cas d'erreur
+                                    frame.style.height = prevStyles.height;
+                                    frame.style.width = prevStyles.width;
+                                    frame.style.overflow = prevStyles.overflow;
+                                    frame.style.maxHeight = prevStyles.maxHeight;
+                                    window.html2canvas = _originalHtml2Canvas;
+                                    return Promise.reject(err);
+                                });
+                            };
+                        }
+
+                        // génère le canvas (useCORS pour permettre les images locales si same-origin)
+                        const canvas = await html2canvas(frame, {
+                            width,
+                            height,
+                            scale: 1,
+                            useCORS: true,
+                            allowTaint: true,
+                            backgroundColor: null
+                        });
+
+                        canvas.toBlob((blob) => {
+                            if (!blob) {
+                                alert('Échec de la génération de l\'image.');
+                                return;
+                            }
+                            const a = document.createElement('a');
+                            const url = URL.createObjectURL(blob);
+                            a.href = url;
+                            a.download = `patterns-${width}x${height}.png`;
+                            document.body.appendChild(a);
+                            a.click();
+                            a.remove();
+                            setTimeout(() => URL.revokeObjectURL(url), 5000);
+                        }, 'image/png');
+                    } catch (err) {
+                        console.error(err);
+                        alert('Impossible de générer l\'image : ' + (err.message || err));
+                    }
+                });
+            })();
+        }
+
+        textarea.addEventListener('input', updatePatterns);
+
+        // optionnel : charger un exemple au démarrage
+        textarea.value = 'ABCD ÉFGH';
+        updatePatterns();
+        (function removeSaltoText(){
+            function clean(node){
+                if(!node) return;
+                const list = node.nodeType === 1 && node.matches('.space[aria-label="saut de ligne"]')
+                    ? [node]
+                    : Array.from(node.querySelectorAll('.space[aria-label="saut de ligne"]'));
+                list.forEach(n => {
+                    n.textContent = ''; // remplacer "SÀLTO" par un espace blanc (texte vide)
+                    n.setAttribute('aria-label', 'saut de ligne');
+                });
+            }
+
+            // cleanup initial content
+            clean(patternsEl);
+
+            // surveille les ajouts futurs pour appliquer le même nettoyage
+            const mo = new MutationObserver(muts => {
+                for (const m of muts) {
+                    for (const node of m.addedNodes) {
+                        if (node.nodeType !== 1) continue;
+                        clean(node);
+                    }
+                }
+            });
+            mo.observe(patternsEl, { childList: true, subtree: true });
+        })();
+        // agrandit les vignettes et supprime l'espacement pour qu'elles se touchent
+        (function(){
+            const s = document.createElement('style');
+            s.textContent = `
+                .patterns { gap: 0 !important; }
+                .pattern { width: 120px !important; height: 120px !important; border: none !important; border-radius: 0 !important; }
+                .pattern img { width:100% !important; height:100% !important; object-fit: cover !important; display:block !important; }
+                .space { width: 120px !important; height: 120px !important; border: 1px dashed #eee !important; border-radius: 0 !important; }
+            `;
+            document.head.appendChild(s);
+        })();
+        
+    </script>
+</body>
+</html>
